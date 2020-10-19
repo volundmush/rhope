@@ -5,6 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "rhope.h"
+#include <json-c/json.h>
+
+
 
 void alloc_buffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
     buf->base = malloc(suggested_size);
@@ -61,7 +64,7 @@ void start_server() {
 int main() {
     rhope_state_t state = {0};
     state.loop = uv_default_loop();
-    rh_kv_insert(&state.protocols, "test", (void*)&state);
+    rh_dict_insert(&state.protocols, "test", (void*)&state);
     printf("Now quitting.\n");
     return 0;
 }
