@@ -62,7 +62,7 @@ void start_server() {
 
 
 int main() {
-    rhope_state_t state = {0};
+    rh_state_t state = {0};
     state.loop = uv_default_loop();
     rh_dict_insert(&state.protocols, "test", (void*)&state);
     printf("Now quitting.\n");
