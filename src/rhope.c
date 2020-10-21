@@ -4,6 +4,16 @@
 
 #include "rhope.h"
 
+int rh_strcpy(char **in_dest, const char *in_src) {
+    *in_dest = calloc(strlen(in_src)+1, 1);
+    if(*in_dest == 0) {
+        return -1;
+    }
+    strcpy(*in_dest, in_src);
+    return 0;
+}
+
+
 rh_kvnode_t *rh_dict_get_node(rh_dict_t *in_dict, char *in_key) {
     rh_kvnode_t *cur = in_dict->head;
     while(cur != 0) {
@@ -38,12 +48,9 @@ int rh_dict_get_or_create(rh_dict_t *in_dict, char *in_key, rh_kvnode_t **in_out
         return -1;
     }
 
-    new_node->key = calloc(strlen(in_key) + 1, 1);
-    if(new_node->key == 0) {
-        // calloc failed!
+    if(rh_strcpy(&new_node->key, in_key)) {
         return -1;
     }
-    strcpy(new_node->key, in_key);
 
     if(in_dict->head != 0) {
         in_dict->tail->next = new_node;

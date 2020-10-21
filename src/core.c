@@ -5,9 +5,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "rhope.h"
+#include "config.h"
 #include <json-c/json.h>
-
-
+#include <unistd.h>
+#include <sys/stat.h>
 
 void alloc_buffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
     buf->base = malloc(suggested_size);
@@ -62,9 +63,26 @@ void start_server() {
 
 
 int main() {
+    char cwd[1024];
+    if (getcwd(cwd, sizeof(cwd)) == NULL)
+        perror("getcwd() error");
+    else
+        printf("current working directory is: %s\n", cwd);
+
+    struct stat st;
+    stat("config.json", &st);
+
+    char *js = calloc(1, st.st_size+1);
+    FILE *f = fopen("config.json", "rb");
+    fread(js, 1, st.st_size, f);
+
     rh_state_t state = {0};
     state.loop = uv_default_loop();
-    rh_dict_insert(&state.protocols, "test", (void*)&state);
+    int err = 0;
+    if((err = rh_load_json(&state, js))) {
+        return -1;
+    }
+
     printf("Now quitting.\n");
     return 0;
 }

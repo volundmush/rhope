@@ -9,7 +9,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define rh_dict_foreach(head,k,v,type) char *k = 0; type *v = 0;for(rh_kvnode_t *entry = head;({ if(entry) { k = entry->key; v = (type*)entry->value; } ; entry; });entry = entry->next)
 
+int rh_strcpy(char **in_dest, const char *in_src);
 
 typedef struct rh_kvnode_s {
     struct rh_kvnode_s *next;
@@ -64,9 +66,9 @@ typedef struct rh_server_s {
     uv_tcp_t *handle;
 } rh_server_t;
 
-typedef void (*rh_plugin_init_cb)(rh_state_t*);
-typedef void (*rh_plugin_start_cb)(rh_state_t*);
-typedef void (*rh_plugin_shutdown_cb)(rh_state_t*);
+typedef int (*rh_plugin_init_cb)(rh_state_t*);
+typedef int (*rh_plugin_start_cb)(rh_state_t*);
+typedef int (*rh_plugin_shutdown_cb)(rh_state_t*);
 
 typedef struct rh_plugin_s {
     char *name;
