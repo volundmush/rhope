@@ -53,9 +53,8 @@ typedef struct rh_mudtelnet_appdata_s {
 
 int rh_mudtelnet_charbuffer_init(rh_mudtelnet_charbuffer_t *buf) {
     buf->capacity = 8096 * 4;
-    buf->buffer = calloc(buf->capacity, 1);
     buf->cursor = 0;
-    if(!buf->buffer) {
+    if(!(buf->buffer = calloc(buf->capacity, 1))) {
         return -1;
     }
     return 0;
