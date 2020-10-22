@@ -37,21 +37,146 @@ static const telnet_telopt_t mudtelopts[] = {
         { -1, 0, 0 }
 };
 
-void rh_mudtelnet_connect_cb(uv_connect_t *req, int status) {
+typedef struct rh_mudtelnet_charbuffer_s {
+    char *buffer;
+    unsigned long length;
+    unsigned long capacity;
+    unsigned long cursor;
+} rh_mudtelnet_charbuffer_t;
 
+typedef struct rh_mudtelnet_appdata_s {
+    uv_tcp_t *handle;
+    uv_tcp_t *server;
+    telnet_t *telnet;
+    rh_mudtelnet_charbuffer_t cmd_buffer;
+} rh_mudtelnet_appdata_t;
+
+int rh_mudtelnet_charbuffer_init(rh_mudtelnet_charbuffer_t *buf) {
+    buf->capacity = 8096 * 4;
+    buf->buffer = calloc(buf->capacity, 1);
+    buf->cursor = 0;
+    if(!buf->buffer) {
+        return -1;
+    }
+    return 0;
+}
+
+int rh_mudtelnet_appdata_init(rh_mudtelnet_appdata_t *data) {
+    if(rh_mudtelnet_charbuffer_init(&data->cmd_buffer)) {
+        return -1;
+    }
+    return 0;
+}
+
+void rh_mudtelnet_event_ev_data(telnet_t *telnet, telnet_event_t *ev, void *user_data) {
+    rh_mudtelnet_appdata_t *appdata = (rh_mudtelnet_appdata_t*)user_data;
+
+}
+
+void rh_mudtelnet_event_ev_send(telnet_t *telnet, telnet_event_t *ev, void *user_data) {
+    rh_mudtelnet_appdata_t *appdata = (rh_mudtelnet_appdata_t*)user_data;
+
+}
+
+void rh_mudtelnet_event_handler(telnet_t *telnet, telnet_event_t *ev, void *user_data) {
+
+    switch(ev->type) {
+        case TELNET_EV_DATA:
+            // This is commands typed by the user!
+            rh_mudtelnet_event_ev_data(telnet, ev, user_data);
+            break;
+        case TELNET_EV_SEND:
+            // This is text being sent to the user!
+            rh_mudtelnet_event_ev_send(telnet, ev, user_data);
+            break;
+        case TELNET_EV_IAC:
+            // We received a simple IAC command... what to do with it?
+            break;
+        case TELNET_EV_WILL:
+            break;
+        case TELNET_EV_DO:
+            break;
+        case TELNET_EV_WONT:
+            break;
+        case TELNET_EV_DONT:
+            break;
+        case TELNET_EV_SUBNEGOTIATION:
+            break;
+        case TELNET_EV_COMPRESS:
+            break;
+        case TELNET_EV_ZMP:
+            break;
+        case TELNET_EV_TTYPE:
+            break;
+        case TELNET_EV_ENVIRON:
+            break;
+        case TELNET_EV_MSSP:
+            break;
+        case TELNET_EV_WARNING:
+            break;
+        case TELNET_EV_ERROR:
+            break;
+    }
+
+}
+
+void rh_mudtelnet_connect_cb(uv_connect_t *req, int status) {
+    // This isn't used... yet...
 }
 
 void rh_mudtelnet_connection_cb(uv_stream_t *server, int status) {
+    rh_server_t *rs = (rh_server_t*)server->data;
+
+    if (status < 0) {
+        fprintf(stderr, "New connection error %s\n", uv_strerror(status));
+        // error!
+        return;
+    }
+
+    uv_tcp_t *client = 0;
+    if(!(client = (uv_tcp_t*) calloc(1, sizeof(uv_tcp_t)))) {
+        printf("alloc error for client");
+        return;
+    }
+
+    uv_tcp_init(server->loop, client);
+    if (uv_accept(server, (uv_stream_t*) client) == 0) {
+        uv_read_start((uv_stream_t*) client, rs->protocol->on_alloc, rs->protocol->on_read);
+        rh_mudtelnet_appdata_t *ud = calloc(1, sizeof(rh_mudtelnet_appdata_t));
+        if(!(ud && rh_mudtelnet_appdata_init(ud))) {
+            printf("alloc error for appdata");
+            return;
+        }
+        ud->handle = client;
+        ud->server = (uv_tcp_t*)server;
+        telnet_t *tel = telnet_init((const telnet_telopt_t *)&mudtelopts, rh_mudtelnet_event_handler, 0, (void*)ud);
+        ud->telnet = tel;
+    }
+    else {
+        uv_close((uv_handle_t*) client, rs->protocol->on_close);
+    }
 
 }
 
-void rh_mudtelnet_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
+void rh_mudtelnet_alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+    buf->base = malloc(suggested_size);
+    buf->len = suggested_size;
+}
 
+void rh_mudtelnet_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
+    fwrite(buf->base, 1, nread, stdout);
+    free(buf->base);
 }
 
 void rh_mudtelnet_write_cb(uv_write_t *req, int status) {
 
 }
+
+void rh_mudtelnet_close_cb(uv_handle_t *handle) {
+
+}
+
+
 
 void rh_mudtelnet_shutdown_cb(uv_shutdown_t *req, int status) {
 
@@ -62,6 +187,8 @@ rh_protocol_t mudtelnet = {"mudtelnet",
                            &rh_mudtelnet_connection_cb,
                            &rh_mudtelnet_read_cb,
                            &rh_mudtelnet_write_cb,
+                           &rh_mudtelnet_close_cb,
+                           &rh_mudtelnet_alloc_cb,
                            &rh_mudtelnet_shutdown_cb
                            };
 

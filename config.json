@@ -1,9 +1,15 @@
 {
-  "plugins": ["telnet"],
+  "plugins": ["mudtelnet"],
   "interfaces": {
     "any": "0.0.0.0",
     "internal": "127.0.0.1"
   },
   "tls": {},
-  "servers": {}
+  "servers": {
+    "mudtelnet_plain": {
+      "interface": "any",
+      "port": 4101,
+      "protocol": "mudtelnet"
+    }
+  }
 }

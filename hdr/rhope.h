@@ -24,17 +24,16 @@ typedef struct rh_dict_s {
     rh_kvnode_t *tail;
 } rh_dict_t;
 
-rh_kvnode_t *rh_dict_get_node(rh_dict_t *in_holder, char *in_key);
+rh_kvnode_t *rh_dict_get_node(rh_dict_t *in_holder, const char *in_key);
 
-void *rh_dict_get_value(rh_dict_t *in_dict, char *in_key);
+void *rh_dict_get_value(rh_dict_t *in_dict, const char *in_key);
 
-int rh_dict_get_or_create(rh_dict_t *in_dict, char *in_key, rh_kvnode_t **in_out);
+int rh_dict_get_or_create(rh_dict_t *in_dict, const char *in_key, rh_kvnode_t **in_out);
 
 // Inserts - or replaces an existing - key with the given value into *holder.
-int rh_dict_insert(rh_dict_t *in_dict, char *in_key, void *in_value);
+int rh_dict_insert(rh_dict_t *in_dict, const char *in_key, void *in_value);
 
 // this struct is used to hold the global state of the Rhope server.
-
 typedef struct rh_state_s {
     uv_loop_t *loop;
     rh_dict_t plugins;
@@ -43,6 +42,8 @@ typedef struct rh_state_s {
     rh_dict_t tls;
     rh_dict_t servers;
 } rh_state_t;
+
+int rh_setup_servers(rh_state_t *state);
 
 typedef struct rh_interface_s {
     char *name;
@@ -55,6 +56,8 @@ typedef struct rh_protocol_s {
     uv_connection_cb on_accept;
     uv_read_cb on_read;
     uv_write_cb on_write;
+    uv_close_cb on_close;
+    uv_alloc_cb on_alloc;
     uv_shutdown_cb on_shutdown;
 } rh_protocol_t;
 
@@ -62,7 +65,8 @@ typedef struct rh_server_s {
     char *name;
     rh_protocol_t *protocol;
     rh_interface_t *interface;
-    unsigned short port;
+    int port;
+    struct sockaddr_in *sockaddr;
     uv_tcp_t *handle;
 } rh_server_t;
 
