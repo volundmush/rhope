@@ -21,6 +21,17 @@
 // MSDP - Mud Server Data Protocol
 #define TELNET_TELOPT_MSDP 69
 
+#define TELNET_MTTS_ANSI 0x1
+#define TELNET_MTTS_VT100 0x2
+#define TELNET_MTTS_UTF8 0x4
+#define TELNET_MTTS_256COLOR 0x8
+#define TELNET_MTTS_MOUSETRACKING 0x16
+#define TELNET_MTTS_OSCCOLORPALETTE 0x32
+#define TELNET_MTTS_SCREENREADER 0x64
+#define TELNET_MTTS_PROXY 0x128
+#define TELNET_MTTS_TRUECOLOR 0x256
+#define TELNET_MTTS_MNES 0x512
+#define TELNET_MTTS_MSLP 0x1024
 
 static const telnet_telopt_t mudtelopts[] = {
         { TELNET_TELOPT_SGA,       TELNET_WILL, TELNET_DO   },
@@ -37,6 +48,24 @@ static const telnet_telopt_t mudtelopts[] = {
         { -1, 0, 0 }
 };
 
+typedef struct rh_mudtelnet_telopt_s {
+    int option;
+    int negotiate;
+} rh_mudtelnet_telopt_t;
+
+static const rh_mudtelnet_telopt_t mudtelstart[] = {
+        {TELNET_TELOPT_LINEMODE, TELNET_DO},
+        {TELNET_TELOPT_SGA, TELNET_WILL},
+        {TELNET_TELOPT_NAWS, TELNET_DO},
+        {TELNET_TELOPT_TTYPE, TELNET_DO},
+        {TELNET_TELOPT_MCCP2, TELNET_WILL},
+        {TELNET_TELOPT_MSSP, TELNET_WILL},
+        {TELNET_TELOPT_MSDP, TELNET_WILL},
+        {TELNET_TELOPT_GMCP, TELNET_WILL},
+        {TELNET_TELOPT_EOR, TELNET_WILL},
+        //{TELNET_TELOPT_MXP, TELNET_WILL}
+};
+
 typedef struct rh_mudtelnet_charbuffer_s {
     char *buffer;
     unsigned long length;
@@ -44,11 +73,28 @@ typedef struct rh_mudtelnet_charbuffer_s {
     unsigned long cursor;
 } rh_mudtelnet_charbuffer_t;
 
+typedef struct rh_mudtelnet_naws_s {
+    int width;
+    int height;
+} rh_mudtelnet_naws_t;
+
+typedef struct rh_mudtelnet_ttype_s {
+    int handshakes;
+    char *client_name;
+    char *client_version;
+    char *terminal_type;
+    int mtts_flags;
+} rh_mudtelnet_ttype_t;
+
 typedef struct rh_mudtelnet_appdata_s {
     uv_tcp_t *handle;
     uv_tcp_t *server;
     telnet_t *telnet;
+    rh_mudtelnet_naws_t naws;
+    rh_mudtelnet_ttype_t ttype;
     rh_mudtelnet_charbuffer_t cmd_buffer;
+    // if EOR is set, IAC EOR will be used for prompts. else, IAC GA will.
+    int eor;
 } rh_mudtelnet_appdata_t;
 
 int rh_mudtelnet_charbuffer_init(rh_mudtelnet_charbuffer_t *buf) {
@@ -69,12 +115,19 @@ int rh_mudtelnet_appdata_init(rh_mudtelnet_appdata_t *data) {
 
 void rh_mudtelnet_event_ev_data(telnet_t *telnet, telnet_event_t *ev, void *user_data) {
     rh_mudtelnet_appdata_t *appdata = (rh_mudtelnet_appdata_t*)user_data;
-
+    fwrite(ev->data.buffer, 1, ev->data.size, stdout);
+    printf("received data!");
 }
 
 void rh_mudtelnet_event_ev_send(telnet_t *telnet, telnet_event_t *ev, void *user_data) {
     rh_mudtelnet_appdata_t *appdata = (rh_mudtelnet_appdata_t*)user_data;
-
+    uv_write_t *write = calloc(1, sizeof(uv_write_t));
+    uv_buf_t *buf = calloc(1, sizeof(uv_buf_t));
+    buf->base = calloc(1, ev->data.size);
+    buf->len = ev->data.size;
+    memcpy(buf->base, ev->data.buffer, ev->data.size);
+    rh_server_t *server = appdata->server->data;
+    uv_write(write, (uv_stream_t*)appdata->handle, buf, 1, server->protocol->on_write);
 }
 
 void rh_mudtelnet_event_handler(telnet_t *telnet, telnet_event_t *ev, void *user_data) {
@@ -140,9 +193,8 @@ void rh_mudtelnet_connection_cb(uv_stream_t *server, int status) {
 
     uv_tcp_init(server->loop, client);
     if (uv_accept(server, (uv_stream_t*) client) == 0) {
-        uv_read_start((uv_stream_t*) client, rs->protocol->on_alloc, rs->protocol->on_read);
         rh_mudtelnet_appdata_t *ud = calloc(1, sizeof(rh_mudtelnet_appdata_t));
-        if(!(ud && rh_mudtelnet_appdata_init(ud))) {
+        if(!(ud && !rh_mudtelnet_appdata_init(ud))) {
             printf("alloc error for appdata");
             return;
         }
@@ -150,6 +202,12 @@ void rh_mudtelnet_connection_cb(uv_stream_t *server, int status) {
         ud->server = (uv_tcp_t*)server;
         telnet_t *tel = telnet_init((const telnet_telopt_t *)&mudtelopts, rh_mudtelnet_event_handler, 0, (void*)ud);
         ud->telnet = tel;
+        client->data = (void*)ud;
+
+        for(int i = 0; i <=8; i++) {
+            telnet_negotiate(tel, mudtelstart[i].negotiate, mudtelstart[i].option);
+        }
+        uv_read_start((uv_stream_t*) client, rs->protocol->on_alloc, rs->protocol->on_read);
     }
     else {
         uv_close((uv_handle_t*) client, rs->protocol->on_close);
@@ -158,12 +216,13 @@ void rh_mudtelnet_connection_cb(uv_stream_t *server, int status) {
 }
 
 void rh_mudtelnet_alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
-    buf->base = malloc(suggested_size);
+    buf->base = calloc(suggested_size, 1);
     buf->len = suggested_size;
 }
 
 void rh_mudtelnet_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
-    fwrite(buf->base, 1, nread, stdout);
+    rh_mudtelnet_appdata_t *appdata = (rh_mudtelnet_appdata_t*)stream->data;
+    telnet_recv(appdata->telnet, buf->base, nread);
     free(buf->base);
 }
 
